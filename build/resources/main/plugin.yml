@@ -1,0 +1,22 @@
+name: SmorkiItemBlacklist
+version: '1.0.0'
+main: com.smorki.itemblacklist.SmorkiItemBlacklist
+api-version: '1.21'
+folia-supported: true
+author: Smorki
+description: A high-performance, fully configurable item blacklist safety plugin.
+
+commands:
+  smorkiblacklist:
+    description: Manage the SmorkiItemBlacklist plugin.
+    usage: /<command> reload
+    permission: smorki.blacklist.admin
+    aliases: [sib, itemblacklist]
+
+permissions:
+  smorki.blacklist.admin:
+    description: Allows use of SmorkiItemBlacklist admin commands
+    default: op
+  smorki.blacklist.bypass:
+    description: Allows a player to bypass the item blacklist
+    default: op
