@@ -25,6 +25,7 @@ public final class SmorkiItemBlacklist extends JavaPlugin {
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final Set<Material> blacklistedMaterials = new HashSet<>();
     private final Map<UUID, Map<Material, Integer>> warningCounts = new HashMap<>();
+    private final Map<UUID, Long> lastWarningMessageTimes = new HashMap<>();
 
     private String messagePrefix;
     private String messageReloadSuccess;
@@ -40,6 +41,7 @@ public final class SmorkiItemBlacklist extends JavaPlugin {
     private boolean blockPlace;
     private boolean blockShulkerWithBlacklistedItems;
     private int removeAfterWarnings;
+    private int warningCooldownSeconds;
 
     @Override
     public void onEnable() {
@@ -61,6 +63,7 @@ public final class SmorkiItemBlacklist extends JavaPlugin {
     public void onDisable() {
         blacklistedMaterials.clear();
         warningCounts.clear();
+        lastWarningMessageTimes.clear();
         getLogger().info("SmorkiItemBlacklist has been disabled.");
     }
 
@@ -82,6 +85,7 @@ public final class SmorkiItemBlacklist extends JavaPlugin {
         blockPlace = config.getBoolean("settings.block-place", true);
         blockShulkerWithBlacklistedItems = config.getBoolean("settings.block-shulker-with-blacklisted-items", true);
         removeAfterWarnings = config.getInt("settings.remove-after-warnings", 5);
+        warningCooldownSeconds = config.getInt("settings.warning-cooldown-seconds", 1);
 
         messagePrefix = config.getString("messages.prefix", "");
         messageReloadSuccess = config.getString("messages.reload-success", "<green>Configuration reloaded successfully.");
@@ -157,7 +161,7 @@ public final class SmorkiItemBlacklist extends JavaPlugin {
     }
 
     public void handleBlockedItem(Player player, Material material) {
-        player.sendMessage(getItemBlockedMessage());
+        sendWarningMessage(player);
 
         if (material == null || removeAfterWarnings <= 0 || !blacklistedMaterials.contains(material)) {
             return;
@@ -172,18 +176,40 @@ public final class SmorkiItemBlacklist extends JavaPlugin {
         }
 
         counts.put(material, 0);
-        removeMaterialFromInventory(player, material);
-        player.sendMessage(deserializeWithPrefix(messageItemRemoved));
+        if (removeMaterialFromInventory(player, material)) {
+            player.sendMessage(deserializeWithPrefix(messageItemRemoved));
+        }
     }
 
-    private void removeMaterialFromInventory(Player player, Material material) {
+    private void sendWarningMessage(Player player) {
+        long now = System.currentTimeMillis();
+        long cooldownMs = Math.max(0, warningCooldownSeconds) * 1000L;
+
+        if (cooldownMs > 0) {
+            Long last = lastWarningMessageTimes.get(player.getUniqueId());
+            if (last != null && now - last < cooldownMs) {
+                return;
+            }
+            lastWarningMessageTimes.put(player.getUniqueId(), now);
+        }
+
+        player.sendMessage(getItemBlockedMessage());
+    }
+
+    private boolean removeMaterialFromInventory(Player player, Material material) {
+        boolean removed = false;
+
         for (ItemStack item : player.getInventory().all(material).values()) {
             player.getInventory().remove(item);
+            removed = true;
         }
+
+        return removed;
     }
 
     public void clearWarnings(UUID playerId) {
         warningCounts.remove(playerId);
+        lastWarningMessageTimes.remove(playerId);
     }
 
     public Set<Material> getBlacklistedMaterials() {

@@ -9,6 +9,7 @@ settings:
   block-place: true
   block-shulker-with-blacklisted-items: true
   remove-after-warnings: 5
+  warning-cooldown-seconds: 1
 
 messages:
   prefix: "<gradient:#00A3E0:#00FFFF>Item Blacklist</gradient> <white>»</white> "
