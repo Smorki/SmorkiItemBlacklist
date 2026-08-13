@@ -1,6 +1,5 @@
 plugins {
     id 'java'
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
 }
 
 group = 'com.smorki'
@@ -38,10 +37,6 @@ processResources {
     }
 }
 
-shadowJar {
-    archiveClassifier.set('')
-}
-
 build {
-    dependsOn shadowJar
+    dependsOn jar
 }
