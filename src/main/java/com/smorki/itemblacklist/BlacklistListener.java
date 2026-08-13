@@ -12,7 +12,9 @@ import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BlockStateMeta;
 
 public final class BlacklistListener implements Listener {
 
@@ -35,6 +37,36 @@ public final class BlacklistListener implements Listener {
         return humanEntity.hasPermission(plugin.getBypassPermission());
     }
 
+    private boolean isShulkerWithBlacklistedItems(ItemStack itemStack) {
+        if (itemStack == null) {
+            return false;
+        }
+
+        if (!(itemStack.getItemMeta() instanceof BlockStateMeta meta)) {
+            return false;
+        }
+
+        if (!(meta.getBlockState() instanceof org.bukkit.block.ShulkerBox shulkerBox)) {
+            return false;
+        }
+
+        for (ItemStack content : shulkerBox.getInventory().getContents()) {
+            if (isBlacklisted(content)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean isBlockedItem(ItemStack itemStack) {
+        if (isBlacklisted(itemStack)) {
+            return true;
+        }
+
+        return plugin.isBlockShulkerWithBlacklistedItems() && isShulkerWithBlacklistedItems(itemStack);
+    }
+
     @EventHandler
     public void onBlockPlace(BlockPlaceEvent event) {
         if (!plugin.isEngineEnabled() || !plugin.isBlockPlace()) {
@@ -51,7 +83,7 @@ public final class BlacklistListener implements Listener {
 
         if (plugin.getBlacklistedMaterials().contains(placedMaterial)) {
             event.setCancelled(true);
-            player.sendMessage(plugin.getItemBlockedMessage());
+            plugin.handleBlockedItem(player, placedMaterial);
         }
     }
 
@@ -75,7 +107,7 @@ public final class BlacklistListener implements Listener {
 
         if (isBlacklisted(item)) {
             event.setCancelled(true);
-            player.sendMessage(plugin.getItemBlockedMessage());
+            plugin.handleBlockedItem(player, item.getType());
         }
     }
 
@@ -96,9 +128,21 @@ public final class BlacklistListener implements Listener {
         ItemStack currentItem = event.getCurrentItem();
         ItemStack cursorItem = event.getCursor();
 
-        if (isBlacklisted(currentItem) || isBlacklisted(cursorItem)) {
-            event.setCancelled(true);
-            player.sendMessage(plugin.getItemBlockedMessage());
+        boolean currentBlocked = isBlockedItem(currentItem);
+        boolean cursorBlocked = isBlockedItem(cursorItem);
+
+        if (!currentBlocked && !cursorBlocked) {
+            return;
+        }
+
+        event.setCancelled(true);
+
+        if (currentBlocked) {
+            plugin.handleBlockedItem(player, currentItem.getType());
+        }
+
+        if (cursorBlocked) {
+            plugin.handleBlockedItem(player, cursorItem.getType());
         }
     }
 
@@ -116,9 +160,9 @@ public final class BlacklistListener implements Listener {
 
         Item droppedItem = event.getItemDrop();
 
-        if (isBlacklisted(droppedItem.getItemStack())) {
+        if (isBlockedItem(droppedItem.getItemStack())) {
             event.setCancelled(true);
-            player.sendMessage(plugin.getItemBlockedMessage());
+            plugin.handleBlockedItem(player, droppedItem.getItemStack().getType());
         }
     }
 
@@ -138,8 +182,14 @@ public final class BlacklistListener implements Listener {
 
         ItemStack itemStack = event.getItem().getItemStack();
 
-        if (isBlacklisted(itemStack)) {
+        if (isBlockedItem(itemStack)) {
             event.setCancelled(true);
+            plugin.handleBlockedItem(player, itemStack.getType());
         }
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        plugin.clearWarnings(event.getPlayer().getUniqueId());
     }
 }

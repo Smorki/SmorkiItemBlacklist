@@ -7,11 +7,16 @@ import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.logging.Level;
 
 public final class SmorkiItemBlacklist extends JavaPlugin {
@@ -19,11 +24,13 @@ public final class SmorkiItemBlacklist extends JavaPlugin {
     private static SmorkiItemBlacklist instance;
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final Set<Material> blacklistedMaterials = new HashSet<>();
+    private final Map<UUID, Map<Material, Integer>> warningCounts = new HashMap<>();
 
     private String messagePrefix;
     private String messageReloadSuccess;
     private String messageReloadNoPermission;
     private String messageItemBlocked;
+    private String messageItemRemoved;
     private String bypassPermission;
 
     private boolean enabled;
@@ -31,6 +38,8 @@ public final class SmorkiItemBlacklist extends JavaPlugin {
     private boolean blockDrop;
     private boolean blockPickup;
     private boolean blockPlace;
+    private boolean blockShulkerWithBlacklistedItems;
+    private int removeAfterWarnings;
 
     @Override
     public void onEnable() {
@@ -51,6 +60,7 @@ public final class SmorkiItemBlacklist extends JavaPlugin {
     @Override
     public void onDisable() {
         blacklistedMaterials.clear();
+        warningCounts.clear();
         getLogger().info("SmorkiItemBlacklist has been disabled.");
     }
 
@@ -70,11 +80,14 @@ public final class SmorkiItemBlacklist extends JavaPlugin {
         blockDrop = config.getBoolean("settings.block-drop", true);
         blockPickup = config.getBoolean("settings.block-pickup", true);
         blockPlace = config.getBoolean("settings.block-place", true);
+        blockShulkerWithBlacklistedItems = config.getBoolean("settings.block-shulker-with-blacklisted-items", true);
+        removeAfterWarnings = config.getInt("settings.remove-after-warnings", 5);
 
         messagePrefix = config.getString("messages.prefix", "");
         messageReloadSuccess = config.getString("messages.reload-success", "<green>Configuration reloaded successfully.");
         messageReloadNoPermission = config.getString("messages.reload-no-permission", "<red>You do not have permission to reload this plugin.");
         messageItemBlocked = config.getString("messages.item-blocked", "<red>That item is blacklisted and cannot be used.");
+        messageItemRemoved = config.getString("messages.item-removed", "<yellow>Blacklisted items were removed from your inventory.");
 
         List<String> rawList = config.getStringList("blacklist");
 
@@ -143,6 +156,36 @@ public final class SmorkiItemBlacklist extends JavaPlugin {
         return deserializeWithPrefix(messageItemBlocked);
     }
 
+    public void handleBlockedItem(Player player, Material material) {
+        player.sendMessage(getItemBlockedMessage());
+
+        if (material == null || removeAfterWarnings <= 0 || !blacklistedMaterials.contains(material)) {
+            return;
+        }
+
+        Map<Material, Integer> counts = warningCounts.computeIfAbsent(player.getUniqueId(), key -> new HashMap<>());
+        int count = counts.getOrDefault(material, 0) + 1;
+
+        if (count < removeAfterWarnings) {
+            counts.put(material, count);
+            return;
+        }
+
+        counts.put(material, 0);
+        removeMaterialFromInventory(player, material);
+        player.sendMessage(deserializeWithPrefix(messageItemRemoved));
+    }
+
+    private void removeMaterialFromInventory(Player player, Material material) {
+        for (ItemStack item : player.getInventory().all(material).values()) {
+            player.getInventory().remove(item);
+        }
+    }
+
+    public void clearWarnings(UUID playerId) {
+        warningCounts.remove(playerId);
+    }
+
     public Set<Material> getBlacklistedMaterials() {
         return blacklistedMaterials;
     }
@@ -169,5 +212,9 @@ public final class SmorkiItemBlacklist extends JavaPlugin {
 
     public boolean isBlockPlace() {
         return blockPlace;
+    }
+
+    public boolean isBlockShulkerWithBlacklistedItems() {
+        return blockShulkerWithBlacklistedItems;
     }
 }
